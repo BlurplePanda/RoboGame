@@ -176,7 +176,9 @@ class ProgNode implements ProgramNode {
 
     @Override
     public void execute(Robot robot) {
-
+        for (StatementNode statement : statements) {
+            statement.execute(robot);
+        }
     }
 
         public String toString() {
