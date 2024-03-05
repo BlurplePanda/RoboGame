@@ -47,9 +47,31 @@ public class Parser {
         if (checkFor("loop", s)) {
             return new StatementNode(new LoopNode(parseBlock(s)));
         }
+        else if (checkFor("if", s)) {
+            require(OPENPAREN, "Missing '('", s);
+            ConditionNode cond = parseCond(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return new StatementNode(new IfNode(parseBlock(s), cond));
+        }
+        else if (checkFor("while", s)) {
+            require(OPENPAREN, "Missing '('", s);
+            ConditionNode cond = parseCond(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return new StatementNode(new IfNode(parseBlock(s), cond));
+        }
         else {
             return new StatementNode(parseAction(s));
         }
+    }
+
+    ConditionNode parseCond(Scanner s) {
+        String relop = require("lt|gt|eq", "Invalid operator", s);
+        require(OPENPAREN, "Missing '('", s);
+        String sensor = require("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist", "Invalid sensor", s);
+        require(",", "Missing ','", s);
+        int num = requireInt(NUMPAT, "Invalid number", s);
+        require(CLOSEPAREN, "Missing ')'", s);
+        return new ConditionNode(relop, new SensorNode(sensor), num);
     }
 
     BlockNode parseBlock(Scanner s) {
@@ -63,7 +85,7 @@ public class Parser {
     }
 
     ActionNode parseAction(Scanner s) {
-        String action = require("move|turnL|turnR|takeFuel|wait", "Invalid action", s);
+        String action = require("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait", "Invalid action", s);
         require(";", "Missing semicolon", s);
         return new ActionNode(action);
     }
@@ -157,7 +179,7 @@ class ProgNode implements ProgramNode {
 
     }
 
-    public String toString() {
+        public String toString() {
         String toReturn = "";
         for (StatementNode statement : statements) {
             toReturn += statement.toString();
@@ -189,6 +211,9 @@ class ActionNode implements ProgramNode {
             case "move" -> robot.move();
             case "turnL" -> robot.turnLeft();
             case "turnR" -> robot.turnRight();
+            case "turnAround" -> robot.turnAround();
+            case "shieldOn" -> robot.setShield(true);
+            case "shieldOff" -> robot.setShield(false);
             case "takeFuel" -> robot.takeFuel();
             case "wait" -> robot.idleWait();
         }
@@ -240,7 +265,7 @@ class BlockNode implements ProgramNode {
 class IfNode implements ProgramNode {
     BlockNode block;
     ConditionNode cond;
-    IfNode(BlockNode block) { this.block = block; this.cond = cond; }
+    IfNode(BlockNode block, ConditionNode cond) { this.block = block; this.cond = cond; }
 
     @Override
     public void execute(Robot robot) {
@@ -250,7 +275,7 @@ class IfNode implements ProgramNode {
     }
 
     public String toString() {
-        return "loop" + this.block.toString();
+        return "if("+cond.toString()+")"+this.block.toString();
     }
 }
 
@@ -264,12 +289,17 @@ class WhileNode implements ProgramNode {
             block.execute(robot);
         }
     }
+
+    public String toString() {
+        return "while("+cond.toString()+")"+this.block.toString();
+    }
 }
 
 class ConditionNode implements BooleanNode {
     String relop;
     SensorNode sensor;
     int num;
+
     ConditionNode(String relop, SensorNode sensor, int number) {
         this.relop = relop;
         this.sensor = sensor;
@@ -278,7 +308,7 @@ class ConditionNode implements BooleanNode {
 
     @Override
     public boolean evaluate(Robot robot) {
-        return switch(relop) {
+        return switch (relop) {
             case "lt" -> sensor.evaluate(robot) < num;
             case "gt" -> sensor.evaluate(robot) > num;
             case "eq" -> sensor.evaluate(robot) == num;
@@ -286,21 +316,29 @@ class ConditionNode implements BooleanNode {
         };
     }
 
-    class SensorNode implements IntNode {
-        String sensor;
-        SensorNode(String sensor) { this.sensor = sensor; }
-        @Override
-        public int evaluate(Robot robot) {
-            return switch(sensor) {
-                case "fuelLeft" -> robot.getFuel();
-                case "oppLR" -> robot.getOpponentLR();
-                case "oppFB" -> robot.getOpponentFB();
-                case "numBarrels" -> robot.numBarrels();
-                case "barrelLR" -> robot.getClosestBarrelLR();
-                case "barrelFB" -> robot.getClosestBarrelFB();
-                case "wallDist" -> robot.getDistanceToWall();
-                default -> throw new ParserFailureException("Invalid sensor"); // this should never run
-            };
-        }
+    public String toString() {
+        return relop+"("+sensor.toString()+", "+num+")";
+    }
+}
+
+class SensorNode implements IntNode {
+    String sensor;
+    SensorNode(String sensor) { this.sensor = sensor; }
+    @Override
+    public int evaluate(Robot robot) {
+        return switch(sensor) {
+            case "fuelLeft" -> robot.getFuel();
+            case "oppLR" -> robot.getOpponentLR();
+            case "oppFB" -> robot.getOpponentFB();
+            case "numBarrels" -> robot.numBarrels();
+            case "barrelLR" -> robot.getClosestBarrelLR();
+            case "barrelFB" -> robot.getClosestBarrelFB();
+            case "wallDist" -> robot.getDistanceToWall();
+            default -> throw new ParserFailureException("Invalid sensor"); // this should never run
+        };
+    }
+
+    public String toString() {
+        return sensor;
     }
 }
