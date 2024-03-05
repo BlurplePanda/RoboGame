@@ -237,4 +237,70 @@ class BlockNode implements ProgramNode {
     }
 }
 
+class IfNode implements ProgramNode {
+    BlockNode block;
+    ConditionNode cond;
+    IfNode(BlockNode block) { this.block = block; this.cond = cond; }
 
+    @Override
+    public void execute(Robot robot) {
+        if (cond.evaluate(robot)) {
+            block.execute(robot);
+        }
+    }
+
+    public String toString() {
+        return "loop" + this.block.toString();
+    }
+}
+
+class WhileNode implements ProgramNode {
+    BlockNode block;
+    ConditionNode cond;
+    WhileNode(BlockNode block) { this.block = block; this.cond = cond; }
+    @Override
+    public void execute(Robot robot) {
+        while (cond.evaluate(robot)) {
+            block.execute(robot);
+        }
+    }
+}
+
+class ConditionNode implements BooleanNode {
+    String relop;
+    SensorNode sensor;
+    int num;
+    ConditionNode(String relop, SensorNode sensor, int number) {
+        this.relop = relop;
+        this.sensor = sensor;
+        this.num = number;
+    }
+
+    @Override
+    public boolean evaluate(Robot robot) {
+        return switch(relop) {
+            case "lt" -> sensor.evaluate(robot) < num;
+            case "gt" -> sensor.evaluate(robot) > num;
+            case "eq" -> sensor.evaluate(robot) == num;
+            default -> throw new ParserFailureException("Invalid operator"); // this should never run
+        };
+    }
+
+    class SensorNode implements IntNode {
+        String sensor;
+        SensorNode(String sensor) { this.sensor = sensor; }
+        @Override
+        public int evaluate(Robot robot) {
+            return switch(sensor) {
+                case "fuelLeft" -> robot.getFuel();
+                case "oppLR" -> robot.getOpponentLR();
+                case "oppFB" -> robot.getOpponentFB();
+                case "numBarrels" -> robot.numBarrels();
+                case "barrelLR" -> robot.getClosestBarrelLR();
+                case "barrelFB" -> robot.getClosestBarrelFB();
+                case "wallDist" -> robot.getDistanceToWall();
+                default -> throw new ParserFailureException("Invalid sensor"); // this should never run
+            };
+        }
+    }
+}
