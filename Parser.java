@@ -94,14 +94,30 @@ public class Parser {
     ActionNode parseAction(Scanner s) {
         String action = require("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait", "Invalid action", s);
         if ((action.equals("move")||action.equals("wait"))&&checkFor(OPENPAREN, s)) {
-            IntNode expr = parseExpr(s);
+            IntNode expr = parseExpression(s);
             require(CLOSEPAREN, "Missing ')'", s);
             return new ActionNode(action, expr);
         }
         return new ActionNode(action);
     }
 
-
+    IntNode parseExpression(Scanner s) {
+        if (s.hasNext(NUMPAT)) {
+            return new NumberNode(s.nextInt());
+        }
+        else if (s.hasNext("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist")) {
+            return new SensorNode(s.next());
+        }
+        else {
+            String op = require("add|sub|mul|div", "Invalid operation", s);
+            require(OPENPAREN, "Missing '('", s);
+            IntNode expr1 = parseExpression(s);
+            require(",", "Missing ','", s);
+            IntNode expr2 = parseExpression(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return new OperationNode(expr1, expr2, op);
+        }
+    }
 
 
 
