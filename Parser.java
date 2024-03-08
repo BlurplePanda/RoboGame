@@ -71,11 +71,11 @@ public class Parser {
     ConditionNode parseCond(Scanner s) {
         String relop = require("lt|gt|eq", "Invalid operator", s);
         require(OPENPAREN, "Missing '('", s);
-        String sensor = require("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist", "Invalid sensor", s);
+        IntNode expr1 = parseExpression(s);
         require(",", "Missing ','", s);
-        int num = requireInt(NUMPAT, "Invalid number", s);
+        IntNode expr2 = parseExpression(s);
         require(CLOSEPAREN, "Missing ')'", s);
-        return new ConditionNode(relop, new SensorNode(sensor), num);
+        return new ConditionNode(relop, expr1, expr2);
     }
 
     BlockNode parseBlock(Scanner s) {
@@ -341,27 +341,27 @@ class WhileNode implements ProgramNode {
 
 class ConditionNode implements BooleanNode {
     String relop;
-    SensorNode sensor;
-    int num;
+    IntNode expr1;
+    IntNode expr2;
 
-    ConditionNode(String relop, SensorNode sensor, int number) {
+    ConditionNode(String relop, IntNode expr1, IntNode expr2) {
         this.relop = relop;
-        this.sensor = sensor;
-        this.num = number;
+        this.expr1 = expr1;
+        this.expr2 = expr2;
     }
 
     @Override
     public boolean evaluate(Robot robot) {
         return switch (relop) {
-            case "lt" -> sensor.evaluate(robot) < num;
-            case "gt" -> sensor.evaluate(robot) > num;
-            case "eq" -> sensor.evaluate(robot) == num;
+            case "lt" -> expr1.evaluate(robot) < expr2.evaluate(robot);
+            case "gt" -> expr1.evaluate(robot) > expr2.evaluate(robot);
+            case "eq" -> expr1.evaluate(robot) == expr2.evaluate(robot);
             default -> throw new ParserFailureException("Invalid operator"); // this should never run
         };
     }
 
     public String toString() {
-        return relop+"("+sensor.toString()+", "+num+")";
+        return relop+"("+expr1.toString()+", "+expr2.toString()+")";
     }
 }
 
