@@ -216,22 +216,24 @@ class ActionNode implements ProgramNode {
 
     @Override
     public void execute(Robot robot) {
+        int num = (amount != null) ? amount.evaluate(robot) : 1;
         switch(actionType){
-            case "move" -> {
-                if(amount != null) {
-                    for (int i = 0; i < amount.evaluate(robot); i++) {
-                        robot.move();
-                    }
-                }
-                else { robot.move(); }
-            }
             case "turnL" -> robot.turnLeft();
             case "turnR" -> robot.turnRight();
             case "turnAround" -> robot.turnAround();
             case "shieldOn" -> robot.setShield(true);
             case "shieldOff" -> robot.setShield(false);
             case "takeFuel" -> robot.takeFuel();
-            case "wait" -> robot.idleWait();
+            case "move" -> {
+                for (int i = 0; i < num; i++) {
+                    robot.move();
+                }
+            }
+            case "wait" -> {
+                for (int i = 0; i < num; i++) {
+                    robot.idleWait();
+                }
+            }
         }
     }
 
