@@ -1,3 +1,4 @@
+import javax.swing.text.html.Option;
 import java.util.*;
 import java.util.regex.*;
 
@@ -209,12 +210,21 @@ class StatementNode implements ProgramNode {
 
 class ActionNode implements ProgramNode {
     String actionType;
+    IntNode amount = null;
     ActionNode(String type) {actionType = type;}
+    ActionNode(String type, IntNode amt) {actionType = type; amount = amt;}
 
     @Override
     public void execute(Robot robot) {
         switch(actionType){
-            case "move" -> robot.move();
+            case "move" -> {
+                if(amount != null) {
+                    for (int i = 0; i < amount.evaluate(robot); i++) {
+                        robot.move();
+                    }
+                }
+                else { robot.move(); }
+            }
             case "turnL" -> robot.turnLeft();
             case "turnR" -> robot.turnRight();
             case "turnAround" -> robot.turnAround();
@@ -350,5 +360,38 @@ class SensorNode implements IntNode {
 
     public String toString() {
         return sensor;
+    }
+}
+
+class NumberNode implements IntNode {
+    int num;
+    NumberNode(int num) {this.num = num;}
+    @Override
+    public int evaluate(Robot robot) {
+        return num;
+    }
+}
+
+class OperationNode implements IntNode {
+    IntNode expr1;
+    IntNode expr2;
+    String operation;
+
+    OperationNode(IntNode expr1, IntNode expr2, String op) {
+        this.expr1 = expr1;
+        this.expr2 = expr2;
+        this.operation = op;
+    }
+
+
+    @Override
+    public int evaluate(Robot robot) {
+        return switch(operation) {
+            case "add" -> expr1.evaluate(robot)+expr2.evaluate(robot);
+            case "sub" -> expr1.evaluate(robot)-expr2.evaluate(robot);
+            case "mul" -> expr1.evaluate(robot)*expr2.evaluate(robot);
+            case "div" -> expr1.evaluate(robot)/expr2.evaluate(robot);
+            default -> throw new ParserFailureException("Invalid operation"); // this should never run
+        };
     }
 }
