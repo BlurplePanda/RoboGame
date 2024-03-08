@@ -18,6 +18,7 @@ public class Parser {
     static final Pattern CLOSEPAREN = Pattern.compile("\\)");
     static final Pattern OPENBRACE = Pattern.compile("\\{");
     static final Pattern CLOSEBRACE = Pattern.compile("\\}");
+    private int indentLevel = 0;
 
     //----------------------------------------------------------------
     /**
@@ -57,7 +58,7 @@ public class Parser {
             require(OPENPAREN, "Missing '('", s);
             ConditionNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
-            return new StatementNode(new IfNode(parseBlock(s), cond));
+            return new StatementNode(new WhileNode(parseBlock(s), cond));
         }
         else {
             return new StatementNode(parseAction(s));
@@ -75,13 +76,16 @@ public class Parser {
     }
 
     BlockNode parseBlock(Scanner s) {
+        indentLevel++;
         List<StatementNode> statements = new ArrayList<>();
         require(OPENBRACE, "Missing '{'", s);
         while (!checkFor(CLOSEBRACE, s)) {
             statements.add(parseStatement(s));
         }
         if (statements.isEmpty()) { fail("Empty loop", s); }
-        return new BlockNode(statements);
+        BlockNode node = new BlockNode(statements, indentLevel);
+        indentLevel--;
+        return node;
     }
 
     ActionNode parseAction(Scanner s) {
@@ -244,8 +248,12 @@ class LoopNode implements ProgramNode {
 
 class BlockNode implements ProgramNode {
     List<StatementNode> statements;
+    int indent;
 
-    BlockNode(List<StatementNode> statements) { this.statements = statements; }
+    BlockNode(List<StatementNode> statements, int indent) {
+        this.statements = statements;
+        this.indent = indent;
+    }
 
     @Override
     public void execute(Robot robot) {
@@ -257,9 +265,9 @@ class BlockNode implements ProgramNode {
     public String toString() {
         String toReturn = "{\n";
         for (StatementNode statement : statements) {
-            toReturn += "\t"+statement.toString();
+            toReturn += "    ".repeat(indent)+statement.toString();
         }
-        toReturn += "}";
+        toReturn += "    ".repeat(indent-1)+"}";
         return toReturn;
     }
 }
@@ -284,7 +292,7 @@ class IfNode implements ProgramNode {
 class WhileNode implements ProgramNode {
     BlockNode block;
     ConditionNode cond;
-    WhileNode(BlockNode block) { this.block = block; this.cond = cond; }
+    WhileNode(BlockNode block, ConditionNode cond) { this.block = block; this.cond = cond; }
     @Override
     public void execute(Robot robot) {
         while (cond.evaluate(robot)) {
