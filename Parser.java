@@ -53,7 +53,12 @@ public class Parser {
             require(OPENPAREN, "Missing '('", s);
             ConditionNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
-            return new StatementNode(new IfNode(parseBlock(s), cond));
+            BlockNode ifBlock = parseBlock(s);
+            if (checkFor("else", s)) {
+                BlockNode elseBlock = parseBlock(s);
+                return new StatementNode(new IfNode(ifBlock, cond, elseBlock));
+            }
+            return new StatementNode(new IfNode(ifBlock, cond));
         }
         else if (checkFor("while", s)) {
             require(OPENPAREN, "Missing '('", s);
@@ -307,19 +312,38 @@ class BlockNode implements ProgramNode {
 }
 
 class IfNode implements ProgramNode {
-    BlockNode block;
+    BlockNode ifBlock;
+    BlockNode elseBlock = null;
     ConditionNode cond;
-    IfNode(BlockNode block, ConditionNode cond) { this.block = block; this.cond = cond; }
+
+    IfNode(BlockNode block, ConditionNode cond) {
+        this.ifBlock = block;
+        this.cond = cond;
+    }
+
+    IfNode(BlockNode ifBlock, ConditionNode cond, BlockNode elseBlock) {
+        this.ifBlock = ifBlock;
+        this.cond = cond;
+        this.elseBlock = elseBlock;
+    }
 
     @Override
     public void execute(Robot robot) {
         if (cond.evaluate(robot)) {
-            block.execute(robot);
+            ifBlock.execute(robot);
+        } else {
+            if (elseBlock != null) {
+                elseBlock.execute(robot);
+            }
         }
     }
 
     public String toString() {
-        return "if("+cond.toString()+")"+this.block.toString();
+        String toReturn = "if(" + cond.toString() + ")" + this.ifBlock.toString();
+        if (elseBlock != null) {
+            toReturn += "else" + this.elseBlock.toString();
+        }
+        return toReturn;
     }
 }
 
