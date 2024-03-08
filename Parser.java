@@ -62,7 +62,9 @@ public class Parser {
             return new StatementNode(new WhileNode(parseBlock(s), cond));
         }
         else {
-            return new StatementNode(parseAction(s));
+            ActionNode action = parseAction(s);
+            require(";", "Missing semicolon", s);
+            return new StatementNode(action);
         }
     }
 
@@ -91,7 +93,11 @@ public class Parser {
 
     ActionNode parseAction(Scanner s) {
         String action = require("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait", "Invalid action", s);
-        require(";", "Missing semicolon", s);
+        if ((action.equals("move")||action.equals("wait"))&&checkFor(OPENPAREN, s)) {
+            IntNode expr = parseExpr(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return new ActionNode(action, expr);
+        }
         return new ActionNode(action);
     }
 
