@@ -1,5 +1,3 @@
-import javax.swing.*;
-import javax.swing.text.html.Option;
 import java.util.*;
 import java.util.regex.*;
 
@@ -75,7 +73,7 @@ public class Parser {
     }
 
     BooleanNode parseCond(Scanner s) {
-        if (s.hasNext("not")) {
+        if (checkFor("not", s)) {
             require(OPENPAREN, "Missing '('", s);
             BooleanNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
@@ -142,7 +140,7 @@ public class Parser {
             require(",", "Missing ','", s);
             IntNode expr2 = parseExpression(s);
             require(CLOSEPAREN, "Missing ')'", s);
-            return new OperationNode(expr1, expr2, op);
+            return new MathNode(expr1, expr2, op);
         }
     }
 
@@ -235,7 +233,7 @@ class ProgNode implements ProgramNode {
         }
     }
 
-        public String toString() {
+    public String toString() {
         String toReturn = "";
         for (StatementNode statement : statements) {
             toReturn += statement.toString();
@@ -363,7 +361,7 @@ class IfNode implements ProgramNode {
     public String toString() {
         String toReturn = "if(" + cond.toString() + ")" + this.ifBlock.toString();
         if (elseBlock != null) {
-            toReturn += "else" + this.elseBlock.toString();
+            toReturn += " else" + this.elseBlock.toString();
         }
         return toReturn;
     }
@@ -396,6 +394,8 @@ class AndNode implements BooleanNode {
     public boolean evaluate(Robot robot) {
         return cond1.evaluate(robot) && cond2.evaluate(robot);
     }
+
+    public String toString() { return "and("+cond1.toString()+", "+cond2.toString()+")"; }
 }
 
 class OrNode implements BooleanNode {
@@ -410,6 +410,8 @@ class OrNode implements BooleanNode {
     public boolean evaluate(Robot robot) {
         return cond1.evaluate(robot) || cond2.evaluate(robot);
     }
+
+    public String toString() { return "or("+cond1.toString()+", "+cond2.toString()+")"; }
 }
 
 class NotNode implements BooleanNode {
@@ -422,6 +424,8 @@ class NotNode implements BooleanNode {
     public boolean evaluate(Robot robot) {
         return !cond.evaluate(robot);
     }
+
+    public String toString() { return "not(" + cond + ")"; }
 }
 
 class RelopNode implements BooleanNode {
@@ -479,14 +483,18 @@ class NumberNode implements IntNode {
     public int evaluate(Robot robot) {
         return num;
     }
+
+    public String toString() {
+        return ""+num;
+    }
 }
 
-class OperationNode implements IntNode {
+class MathNode implements IntNode {
     IntNode expr1;
     IntNode expr2;
     String operation;
 
-    OperationNode(IntNode expr1, IntNode expr2, String op) {
+    MathNode(IntNode expr1, IntNode expr2, String op) {
         this.expr1 = expr1;
         this.expr2 = expr2;
         this.operation = op;
@@ -503,4 +511,6 @@ class OperationNode implements IntNode {
             default -> throw new IllegalStateException("Invalid operation"); // this should never run
         };
     }
+
+    public String toString() { return operation+"("+expr1.toString()+", "+expr2.toString()+")"; }
 }
