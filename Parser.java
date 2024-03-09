@@ -1,3 +1,4 @@
+import javax.swing.*;
 import javax.swing.text.html.Option;
 import java.util.*;
 import java.util.regex.*;
@@ -51,7 +52,7 @@ public class Parser {
         }
         else if (checkFor("if", s)) {
             require(OPENPAREN, "Missing '('", s);
-            ConditionNode cond = parseCond(s);
+            BooleanNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
             BlockNode ifBlock = parseBlock(s);
             if (checkFor("else", s)) {
@@ -62,7 +63,7 @@ public class Parser {
         }
         else if (checkFor("while", s)) {
             require(OPENPAREN, "Missing '('", s);
-            ConditionNode cond = parseCond(s);
+            BooleanNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
             return new StatementNode(new WhileNode(parseBlock(s), cond));
         }
@@ -73,14 +74,35 @@ public class Parser {
         }
     }
 
-    ConditionNode parseCond(Scanner s) {
-        String relop = require("lt|gt|eq", "Invalid operator", s);
-        require(OPENPAREN, "Missing '('", s);
-        IntNode expr1 = parseExpression(s);
-        require(",", "Missing ','", s);
-        IntNode expr2 = parseExpression(s);
-        require(CLOSEPAREN, "Missing ')'", s);
-        return new ConditionNode(relop, expr1, expr2);
+    BooleanNode parseCond(Scanner s) {
+        if (s.hasNext("not")) {
+            require(OPENPAREN, "Missing '('", s);
+            BooleanNode cond = parseCond(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return new NotNode(cond);
+        }
+        else if (s.hasNext("and|or")) {
+            String logOp = s.next();
+            require(OPENPAREN, "Missing '('", s);
+            BooleanNode cond1 = parseCond(s);
+            require(",", "Missing ','", s);
+            BooleanNode cond2 = parseCond(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return switch (logOp) {
+                case "and" -> new AndNode(cond1, cond2);
+                case "or" -> new OrNode(cond1, cond2);
+                default -> throw new IllegalStateException("Invalid operator"); // this should never run
+            };
+        }
+        else {
+            String relop = require("lt|gt|eq", "Invalid operator", s);
+            require(OPENPAREN, "Missing '('", s);
+            IntNode expr1 = parseExpression(s);
+            require(",", "Missing ','", s);
+            IntNode expr2 = parseExpression(s);
+            require(CLOSEPAREN, "Missing ')'", s);
+            return new RelopNode(relop, expr1, expr2);
+        }
     }
 
     BlockNode parseBlock(Scanner s) {
@@ -314,14 +336,14 @@ class BlockNode implements ProgramNode {
 class IfNode implements ProgramNode {
     BlockNode ifBlock;
     BlockNode elseBlock = null;
-    ConditionNode cond;
+    BooleanNode cond;
 
-    IfNode(BlockNode block, ConditionNode cond) {
+    IfNode(BlockNode block, BooleanNode cond) {
         this.ifBlock = block;
         this.cond = cond;
     }
 
-    IfNode(BlockNode ifBlock, ConditionNode cond, BlockNode elseBlock) {
+    IfNode(BlockNode ifBlock, BooleanNode cond, BlockNode elseBlock) {
         this.ifBlock = ifBlock;
         this.cond = cond;
         this.elseBlock = elseBlock;
@@ -349,8 +371,8 @@ class IfNode implements ProgramNode {
 
 class WhileNode implements ProgramNode {
     BlockNode block;
-    ConditionNode cond;
-    WhileNode(BlockNode block, ConditionNode cond) { this.block = block; this.cond = cond; }
+    BooleanNode cond;
+    WhileNode(BlockNode block, BooleanNode cond) { this.block = block; this.cond = cond; }
     @Override
     public void execute(Robot robot) {
         while (cond.evaluate(robot)) {
@@ -362,14 +384,53 @@ class WhileNode implements ProgramNode {
         return "while("+cond.toString()+")"+this.block.toString();
     }
 }
+class AndNode implements BooleanNode {
+    BooleanNode cond1;
+    BooleanNode cond2;
+    AndNode(BooleanNode cond1, BooleanNode cond2) {
+        this.cond1 = cond1;
+        this.cond2 = cond2;
+    }
 
-class ConditionNode implements BooleanNode {
+    @Override
+    public boolean evaluate(Robot robot) {
+        return cond1.evaluate(robot) && cond2.evaluate(robot);
+    }
+}
+
+class OrNode implements BooleanNode {
+    BooleanNode cond1;
+    BooleanNode cond2;
+    OrNode(BooleanNode cond1, BooleanNode cond2) {
+        this.cond1 = cond1;
+        this.cond2 = cond2;
+    }
+
+    @Override
+    public boolean evaluate(Robot robot) {
+        return cond1.evaluate(robot) || cond2.evaluate(robot);
+    }
+}
+
+class NotNode implements BooleanNode {
+    BooleanNode cond;
+    NotNode(BooleanNode cond) {
+        this.cond = cond;
+    }
+
+    @Override
+    public boolean evaluate(Robot robot) {
+        return !cond.evaluate(robot);
+    }
+}
+
+class RelopNode implements BooleanNode {
     String relop;
     IntNode expr1;
     IntNode expr2;
 
-    ConditionNode(String relop, IntNode expr1, IntNode expr2) {
-        this.relop = relop;
+    RelopNode(String relOp, IntNode expr1, IntNode expr2) {
+        this.relop = relOp;
         this.expr1 = expr1;
         this.expr2 = expr2;
     }
@@ -380,7 +441,7 @@ class ConditionNode implements BooleanNode {
             case "lt" -> expr1.evaluate(robot) < expr2.evaluate(robot);
             case "gt" -> expr1.evaluate(robot) > expr2.evaluate(robot);
             case "eq" -> expr1.evaluate(robot) == expr2.evaluate(robot);
-            default -> throw new ParserFailureException("Invalid operator"); // this should never run
+            default -> throw new IllegalStateException("Invalid relative operator"); // this should never run
         };
     }
 
@@ -402,7 +463,7 @@ class SensorNode implements IntNode {
             case "barrelLR" -> robot.getClosestBarrelLR();
             case "barrelFB" -> robot.getClosestBarrelFB();
             case "wallDist" -> robot.getDistanceToWall();
-            default -> throw new ParserFailureException("Invalid sensor"); // this should never run
+            default -> throw new IllegalStateException("Invalid sensor"); // this should never run
         };
     }
 
@@ -439,7 +500,7 @@ class OperationNode implements IntNode {
             case "sub" -> expr1.evaluate(robot)-expr2.evaluate(robot);
             case "mul" -> expr1.evaluate(robot)*expr2.evaluate(robot);
             case "div" -> expr1.evaluate(robot)/expr2.evaluate(robot);
-            default -> throw new ParserFailureException("Invalid operation"); // this should never run
+            default -> throw new IllegalStateException("Invalid operation"); // this should never run
         };
     }
 }
