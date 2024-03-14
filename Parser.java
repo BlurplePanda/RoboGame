@@ -49,15 +49,20 @@ public class Parser {
             return new StatementNode(new LoopNode(parseBlock(s)));
         }
         else if (checkFor("if", s)) {
-            require(OPENPAREN, "Missing '('", s);
-            BooleanNode cond = parseCond(s);
-            require(CLOSEPAREN, "Missing ')'", s);
-            BlockNode ifBlock = parseBlock(s);
+            List<ConditionBlock> condPairs = new ArrayList<>();
+            do {
+                require(OPENPAREN, "Missing '('", s);
+                BooleanNode cond = parseCond(s);
+                require(CLOSEPAREN, "Missing ')'", s);
+                BlockNode block = parseBlock(s);
+                condPairs.add(new ConditionBlock(cond, block));
+            } while (checkFor("elif", s));
+
             if (checkFor("else", s)) {
                 BlockNode elseBlock = parseBlock(s);
-                return new StatementNode(new IfNode(ifBlock, cond, elseBlock));
+                return new StatementNode(new IfNode(condPairs, elseBlock));
             }
-            return new StatementNode(new IfNode(ifBlock, cond));
+            return new StatementNode(new IfNode(condPairs));
         }
         else if (checkFor("while", s)) {
             require(OPENPAREN, "Missing '('", s);
@@ -332,34 +337,36 @@ class BlockNode implements ProgramNode {
 }
 
 class IfNode implements ProgramNode {
-    BlockNode ifBlock;
+    List<ConditionBlock> conditionPairs;
     BlockNode elseBlock = null;
-    BooleanNode cond;
 
-    IfNode(BlockNode block, BooleanNode cond) {
-        this.ifBlock = block;
-        this.cond = cond;
+    IfNode(List<ConditionBlock> conditionPairs) {
+        this.conditionPairs = conditionPairs;
     }
 
-    IfNode(BlockNode ifBlock, BooleanNode cond, BlockNode elseBlock) {
-        this.ifBlock = ifBlock;
-        this.cond = cond;
+    IfNode(List<ConditionBlock> conditionPairs, BlockNode elseBlock) {
+        this.conditionPairs = conditionPairs;
         this.elseBlock = elseBlock;
     }
 
     @Override
     public void execute(Robot robot) {
-        if (cond.evaluate(robot)) {
-            ifBlock.execute(robot);
-        } else {
-            if (elseBlock != null) {
-                elseBlock.execute(robot);
+        for (ConditionBlock pair : conditionPairs) {
+            if (pair.cond.evaluate(robot)) {
+                pair.block.execute(robot);
+                return;
             }
         }
+        elseBlock.execute(robot);
+
     }
 
     public String toString() {
-        String toReturn = "if(" + cond.toString() + ")" + this.ifBlock.toString();
+        ConditionBlock firstIf = conditionPairs.get(0);
+        String toReturn = "if(" + firstIf.cond.toString() + ")" + firstIf.block.toString();
+        for (ConditionBlock pair : conditionPairs) {
+            toReturn += " elif(" + pair.cond.toString() + ")" + pair.block.toString();
+        }
         if (elseBlock != null) {
             toReturn += " else" + this.elseBlock.toString();
         }
@@ -513,4 +520,14 @@ class MathNode implements IntNode {
     }
 
     public String toString() { return operation+"("+expr1.toString()+", "+expr2.toString()+")"; }
+}
+
+class ConditionBlock {
+    BlockNode block;
+    BooleanNode cond;
+
+    ConditionBlock(BooleanNode cond, BlockNode block) {
+        this.block = block;
+        this.cond = cond;
+    }
 }
