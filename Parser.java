@@ -135,8 +135,12 @@ public class Parser {
         if (s.hasNext(NUMPAT)) {
             return new NumberNode(s.nextInt());
         }
-        else if (s.hasNext("fuelLeft|oppLR|oppFB|numBarrels|barrelLR|barrelFB|wallDist")) {
+        else if (s.hasNext("fuelLeft|oppLR|oppFB|numBarrels|wallDist")) {
             return new SensorNode(s.next());
+        }
+        else if (s.hasNext("barrelLR|barrelFB")) {
+            IntNode arg = parseExpression(s);
+            return new SensorNode(s.next(), arg);
         }
         else {
             String op = require("add|sub|mul|div", "Invalid operation", s);
@@ -463,16 +467,22 @@ class RelopNode implements BooleanNode {
 
 class SensorNode implements IntNode {
     String sensor;
+    IntNode amount = null;
     SensorNode(String sensor) { this.sensor = sensor; }
+    SensorNode(String sensor, IntNode amt) {
+        this.sensor = sensor;
+        this.amount = amt;
+    }
     @Override
     public int evaluate(Robot robot) {
+        int barrel = (amount != null) ? amount.evaluate(robot) : 0;
         return switch(sensor) {
             case "fuelLeft" -> robot.getFuel();
             case "oppLR" -> robot.getOpponentLR();
             case "oppFB" -> robot.getOpponentFB();
             case "numBarrels" -> robot.numBarrels();
-            case "barrelLR" -> robot.getClosestBarrelLR();
-            case "barrelFB" -> robot.getClosestBarrelFB();
+            case "barrelLR" -> robot.getBarrelLR(barrel);
+            case "barrelFB" -> robot.getBarrelFB(barrel);
             case "wallDist" -> robot.getDistanceToWall();
             default -> throw new IllegalStateException("Invalid sensor"); // this should never run
         };
