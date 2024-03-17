@@ -20,6 +20,8 @@ public class Parser {
     static final Pattern CLOSEBRACE = Pattern.compile("\\}");
     private int indentLevel = 0;
 
+    private VariableStorage vars = new VariableStorage();
+
     //----------------------------------------------------------------
     /**
      * The top of the parser, which is handed a scanner containing
@@ -69,6 +71,13 @@ public class Parser {
             BooleanNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
             return new StatementNode(new WhileNode(parseBlock(s), cond));
+        }
+        else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
+            String name = s.next();
+            require("\\=", "Expected '='", s);
+            IntNode value = parseExpression(s);
+            require(";", "Missing semicolon", s);
+            return new StatementNode(new AssignNode(name, value, vars));
         }
         else {
             ActionNode action = parseAction(s);
@@ -139,8 +148,18 @@ public class Parser {
             return new SensorNode(s.next());
         }
         else if (s.hasNext("barrelLR|barrelFB")) {
-            IntNode arg = parseExpression(s);
-            return new SensorNode(s.next(), arg);
+            String sensor = s.next();
+            if (checkFor(OPENPAREN, s)) {
+                IntNode arg = parseExpression(s);
+                require(CLOSEPAREN, "Expected ')'", s);
+                return new SensorNode(sensor, arg);
+            }
+            else {
+                return new SensorNode(sensor);
+            }
+        }
+        else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
+            return vars.getVar(s.next());
         }
         else {
             String op = require("add|sub|mul|div", "Invalid operation", s);
@@ -361,15 +380,19 @@ class IfNode implements ProgramNode {
                 return;
             }
         }
-        elseBlock.execute(robot);
+        if (elseBlock != null) {
+            elseBlock.execute(robot);
+        }
 
     }
 
     public String toString() {
         ConditionBlock firstIf = conditionPairs.get(0);
         String toReturn = "if(" + firstIf.cond.toString() + ")" + firstIf.block.toString();
-        for (ConditionBlock pair : conditionPairs) {
-            toReturn += " elif(" + pair.cond.toString() + ")" + pair.block.toString();
+        if (conditionPairs.size() > 1) {
+            for (ConditionBlock pair : conditionPairs) {
+                toReturn += " elif(" + pair.cond.toString() + ")" + pair.block.toString();
+            }
         }
         if (elseBlock != null) {
             toReturn += " else" + this.elseBlock.toString();
@@ -475,14 +498,13 @@ class SensorNode implements IntNode {
     }
     @Override
     public int evaluate(Robot robot) {
-        int barrel = (amount != null) ? amount.evaluate(robot) : 0;
         return switch(sensor) {
             case "fuelLeft" -> robot.getFuel();
             case "oppLR" -> robot.getOpponentLR();
             case "oppFB" -> robot.getOpponentFB();
             case "numBarrels" -> robot.numBarrels();
-            case "barrelLR" -> robot.getBarrelLR(barrel);
-            case "barrelFB" -> robot.getBarrelFB(barrel);
+            case "barrelLR" -> amount == null ? robot.getClosestBarrelLR() : robot.getBarrelLR(amount.evaluate(robot));
+            case "barrelFB" -> amount == null ? robot.getClosestBarrelFB() : robot.getBarrelFB(amount.evaluate(robot));
             case "wallDist" -> robot.getDistanceToWall();
             default -> throw new IllegalStateException("Invalid sensor"); // this should never run
         };
@@ -539,5 +561,45 @@ class ConditionBlock {
     ConditionBlock(BooleanNode cond, BlockNode block) {
         this.block = block;
         this.cond = cond;
+    }
+}
+
+class AssignNode implements ProgramNode {
+    String name;
+    IntNode value;
+    VariableStorage storage;
+
+    AssignNode(String name, IntNode value, VariableStorage storage) {
+        this.name = name;
+        this.value = value;
+        this.storage = storage;
+        storage.setVar(name, value);
+    }
+
+    @Override
+    public void execute(Robot robot) {
+        storage.setVar(name, value);
+    }
+
+    public String toString() {
+        return name + " = " + value + ";";
+    }
+}
+
+class VariableStorage {
+    public Map<String, IntNode> variables;
+    VariableStorage() {
+        variables = new HashMap<>();
+    }
+    public IntNode getVar(String name) {
+        IntNode toReturn = variables.get(name);
+        if (toReturn == null) {
+            toReturn = new NumberNode(0);
+            setVar(name, toReturn);
+        }
+        return toReturn;
+    }
+    public void setVar(String name, IntNode value) {
+        variables.put(name, value);
     }
 }
