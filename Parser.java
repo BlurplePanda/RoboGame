@@ -564,6 +564,28 @@ class ConditionBlock {
     }
 }
 
+class VariableNode implements IntNode {
+    String name;
+    int value;
+
+    VariableNode(String name, int value) {
+        this.name = name;
+        this.value = value;
+    }
+
+    public void setValue(int value) {
+        this.value = value;
+    }
+
+    @Override
+    public int evaluate(Robot robot) {
+        return value;
+    }
+    public String toString() {
+        return name;
+    }
+}
+
 class AssignNode implements ProgramNode {
     String name;
     IntNode value;
@@ -573,12 +595,11 @@ class AssignNode implements ProgramNode {
         this.name = name;
         this.value = value;
         this.storage = storage;
-        storage.setVar(name, value);
     }
 
     @Override
     public void execute(Robot robot) {
-        storage.setVar(name, value);
+        storage.getVar(name).setValue(value.evaluate(robot));
     }
 
     public String toString() {
@@ -587,19 +608,16 @@ class AssignNode implements ProgramNode {
 }
 
 class VariableStorage {
-    public Map<String, IntNode> variables;
+    public Map<String, VariableNode> variables;
     VariableStorage() {
         variables = new HashMap<>();
     }
-    public IntNode getVar(String name) {
-        IntNode toReturn = variables.get(name);
+    public VariableNode getVar(String name) {
+        VariableNode toReturn = variables.get(name);
         if (toReturn == null) {
-            toReturn = new NumberNode(0);
-            setVar(name, toReturn);
+            toReturn = new VariableNode(name, 0);
+            variables.put(name, toReturn);
         }
         return toReturn;
-    }
-    public void setVar(String name, IntNode value) {
-        variables.put(name, value);
     }
 }
