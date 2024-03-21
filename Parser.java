@@ -13,7 +13,7 @@ public class Parser {
 
     // Useful Patterns
 
-    static final Pattern NUMPAT = Pattern.compile("-?[1-9][0-9]*|0"); 
+    static final Pattern NUMPAT = Pattern.compile("-?[1-9][0-9]*|0");
     static final Pattern OPENPAREN = Pattern.compile("\\(");
     static final Pattern CLOSEPAREN = Pattern.compile("\\)");
     static final Pattern OPENBRACE = Pattern.compile("\\{");
@@ -23,6 +23,7 @@ public class Parser {
     private VariableStorage vars = new VariableStorage();
 
     //----------------------------------------------------------------
+
     /**
      * The top of the parser, which is handed a scanner containing
      * the text of the program to parse.
@@ -39,18 +40,17 @@ public class Parser {
             System.out.println("Provided file is empty, running default program.");
             return null;
         }
-        List<StatementNode> statements = new ArrayList<>();
+        List<ProgramNode> statements = new ArrayList<>();
         while (s.hasNext()) {
             statements.add(parseStatement(s));
         }
         return new ProgNode(statements);
     }
 
-    StatementNode parseStatement(Scanner s) {
+    ProgramNode parseStatement(Scanner s) {
         if (checkFor("loop", s)) {
-            return new StatementNode(new LoopNode(parseBlock(s)));
-        }
-        else if (checkFor("if", s)) {
+            return new LoopNode(parseBlock(s));
+        } else if (checkFor("if", s)) {
             List<ConditionBlock> condPairs = new ArrayList<>();
             do {
                 require(OPENPAREN, "Missing '('", s);
@@ -62,27 +62,24 @@ public class Parser {
 
             if (checkFor("else", s)) {
                 BlockNode elseBlock = parseBlock(s);
-                return new StatementNode(new IfNode(condPairs, elseBlock));
+                return new IfNode(condPairs, elseBlock);
             }
-            return new StatementNode(new IfNode(condPairs));
-        }
-        else if (checkFor("while", s)) {
+            return new IfNode(condPairs);
+        } else if (checkFor("while", s)) {
             require(OPENPAREN, "Missing '('", s);
             BooleanNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
-            return new StatementNode(new WhileNode(parseBlock(s), cond));
-        }
-        else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
+            return new WhileNode(parseBlock(s), cond);
+        } else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
             String name = s.next();
             require("\\=", "Expected '='", s);
             IntNode value = parseExpression(s);
             require(";", "Missing semicolon", s);
-            return new StatementNode(new AssignNode(name, value, vars));
-        }
-        else {
+            return new AssignNode(name, value, vars);
+        } else {
             ActionNode action = parseAction(s);
             require(";", "Missing semicolon", s);
-            return new StatementNode(action);
+            return action;
         }
     }
 
@@ -92,8 +89,7 @@ public class Parser {
             BooleanNode cond = parseCond(s);
             require(CLOSEPAREN, "Missing ')'", s);
             return new NotNode(cond);
-        }
-        else if (s.hasNext("and|or")) {
+        } else if (s.hasNext("and|or")) {
             String logOp = s.next();
             require(OPENPAREN, "Missing '('", s);
             BooleanNode cond1 = parseCond(s);
@@ -105,8 +101,7 @@ public class Parser {
                 case "or" -> new OrNode(cond1, cond2);
                 default -> throw new IllegalStateException("Invalid operator"); // this should never run
             };
-        }
-        else {
+        } else {
             String relop = require("lt|gt|eq", "Invalid operator", s);
             require(OPENPAREN, "Missing '('", s);
             IntNode expr1 = parseExpression(s);
@@ -119,12 +114,14 @@ public class Parser {
 
     BlockNode parseBlock(Scanner s) {
         indentLevel++;
-        List<StatementNode> statements = new ArrayList<>();
+        List<ProgramNode> statements = new ArrayList<>();
         require(OPENBRACE, "Missing '{'", s);
         while (!checkFor(CLOSEBRACE, s)) {
             statements.add(parseStatement(s));
         }
-        if (statements.isEmpty()) { fail("Empty loop", s); }
+        if (statements.isEmpty()) {
+            fail("Empty loop", s);
+        }
         BlockNode node = new BlockNode(statements, indentLevel);
         indentLevel--;
         return node;
@@ -132,7 +129,7 @@ public class Parser {
 
     ActionNode parseAction(Scanner s) {
         String action = require("move|turnL|turnR|turnAround|shieldOn|shieldOff|takeFuel|wait", "Invalid action", s);
-        if ((action.equals("move")||action.equals("wait"))&&checkFor(OPENPAREN, s)) {
+        if ((action.equals("move") || action.equals("wait")) && checkFor(OPENPAREN, s)) {
             IntNode expr = parseExpression(s);
             require(CLOSEPAREN, "Missing ')'", s);
             return new ActionNode(action, expr);
@@ -143,25 +140,20 @@ public class Parser {
     IntNode parseExpression(Scanner s) {
         if (s.hasNext(NUMPAT)) {
             return new NumberNode(s.nextInt());
-        }
-        else if (s.hasNext("fuelLeft|oppLR|oppFB|numBarrels|wallDist")) {
+        } else if (s.hasNext("fuelLeft|oppLR|oppFB|numBarrels|wallDist")) {
             return new SensorNode(s.next());
-        }
-        else if (s.hasNext("barrelLR|barrelFB")) {
+        } else if (s.hasNext("barrelLR|barrelFB")) {
             String sensor = s.next();
             if (checkFor(OPENPAREN, s)) {
                 IntNode arg = parseExpression(s);
                 require(CLOSEPAREN, "Expected ')'", s);
                 return new SensorNode(sensor, arg);
-            }
-            else {
+            } else {
                 return new SensorNode(sensor);
             }
-        }
-        else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
+        } else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
             return vars.getVar(s.next());
-        }
-        else {
+        } else {
             String op = require("add|sub|mul|div", "Invalid operation", s);
             require(OPENPAREN, "Missing '('", s);
             IntNode expr1 = parseExpression(s);
@@ -171,7 +163,6 @@ public class Parser {
             return new MathNode(expr1, expr2, op);
         }
     }
-
 
 
     //----------------------------------------------------------------
@@ -198,13 +189,17 @@ public class Parser {
      * message
      */
     static String require(String p, String message, Scanner s) {
-        if (s.hasNext(p)) {return s.next();}
+        if (s.hasNext(p)) {
+            return s.next();
+        }
         fail(message, s);
         return null;
     }
 
     static String require(Pattern p, String message, Scanner s) {
-        if (s.hasNext(p)) {return s.next();}
+        if (s.hasNext(p)) {
+            return s.next();
+        }
         fail(message, s);
         return null;
     }
@@ -215,13 +210,17 @@ public class Parser {
      * if not, it throws an exception with an error message
      */
     static int requireInt(String p, String message, Scanner s) {
-        if (s.hasNext(p) && s.hasNextInt()) {return s.nextInt();}
+        if (s.hasNext(p) && s.hasNextInt()) {
+            return s.nextInt();
+        }
         fail(message, s);
         return -1;
     }
 
     static int requireInt(Pattern p, String message, Scanner s) {
-        if (s.hasNext(p) && s.hasNextInt()) {return s.nextInt();}
+        if (s.hasNext(p) && s.hasNextInt()) {
+            return s.nextInt();
+        }
         fail(message, s);
         return -1;
     }
@@ -232,12 +231,18 @@ public class Parser {
      * false without consuming anything.
      */
     static boolean checkFor(String p, Scanner s) {
-        if (s.hasNext(p)) {s.next(); return true;}
+        if (s.hasNext(p)) {
+            s.next();
+            return true;
+        }
         return false;
     }
 
     static boolean checkFor(Pattern p, Scanner s) {
-        if (s.hasNext(p)) {s.next(); return true;} 
+        if (s.hasNext(p)) {
+            s.next();
+            return true;
+        }
         return false;
     }
 
@@ -250,49 +255,73 @@ public class Parser {
 //     with fields, a toString() method and an execute() method
 //
 
+/**
+ * Interface for all nodes that return a (integer) number,
+ * including sensors, math operations, etc.
+ */
+
+interface IntNode {
+    int evaluate(Robot robot);
+}
+
+/**
+ * Interface for all nodes that return true or false,
+ * including conditions (eg in if statements)
+ */
+
+interface BooleanNode {
+    boolean evaluate(Robot robot);
+}
+
+/**
+ * Node representing the program
+ * (The root node of the generated program tree)
+ * Stores any statements in the program
+ */
 class ProgNode implements ProgramNode {
-    List<StatementNode> statements;
-    ProgNode(List<StatementNode> statements) { this.statements = statements; }
+    List<ProgramNode> statements;
+
+    ProgNode(List<ProgramNode> statements) {
+        this.statements = statements;
+    }
 
     @Override
     public void execute(Robot robot) {
-        for (StatementNode statement : statements) {
+        for (ProgramNode statement : statements) {
             statement.execute(robot);
         }
     }
 
     public String toString() {
         String toReturn = "";
-        for (StatementNode statement : statements) {
+        for (ProgramNode statement : statements) {
             toReturn += statement.toString();
         }
-        return toReturn.substring(0, toReturn.length()-1);
+        return toReturn.substring(0, toReturn.length() - 1);
     }
 }
 
-class StatementNode implements ProgramNode {
-    ProgramNode statement;
-    StatementNode(ProgramNode statement) { this.statement = statement; }
-    @Override
-    public void execute(Robot robot) {
-        statement.execute(robot);
-    }
-
-    public String toString() {
-        return this.statement.toString()+"\n";
-    }
-}
-
+/**
+ * Node representing a robot action
+ * Stores the type of action, and the amount if it exists
+ */
 class ActionNode implements ProgramNode {
     String actionType;
     IntNode amount = null;
-    ActionNode(String type) {actionType = type;}
-    ActionNode(String type, IntNode amt) {actionType = type; amount = amt;}
+
+    ActionNode(String type) {
+        actionType = type;
+    }
+
+    ActionNode(String type, IntNode amt) {
+        actionType = type;
+        amount = amt;
+    }
 
     @Override
     public void execute(Robot robot) {
         int num = (amount != null) ? amount.evaluate(robot) : 1;
-        switch(actionType){
+        switch (actionType) {
             case "turnL" -> robot.turnLeft();
             case "turnR" -> robot.turnRight();
             case "turnAround" -> robot.turnAround();
@@ -313,13 +342,21 @@ class ActionNode implements ProgramNode {
     }
 
     public String toString() {
-        return actionType+";";
+        return actionType + ";";
     }
 }
 
+/**
+ * Node representing a loop
+ * Stores the block of statements inside the loop
+ * Executes them forever (until robot runs out of fuel)
+ */
 class LoopNode implements ProgramNode {
     BlockNode block;
-    LoopNode(BlockNode block) { this.block = block; }
+
+    LoopNode(BlockNode block) {
+        this.block = block;
+    }
 
     @Override
     public void execute(Robot robot) {
@@ -333,32 +370,42 @@ class LoopNode implements ProgramNode {
     }
 }
 
+/**
+ * Node representing a block (inside loop/if/while)
+ * Stores any statements in the block
+ * Also stores an indent level for pretty printing
+ */
 class BlockNode implements ProgramNode {
-    List<StatementNode> statements;
+    List<ProgramNode> statements;
     int indent;
 
-    BlockNode(List<StatementNode> statements, int indent) {
+    BlockNode(List<ProgramNode> statements, int indent) {
         this.statements = statements;
         this.indent = indent;
     }
 
     @Override
     public void execute(Robot robot) {
-        for (StatementNode statement : statements) {
+        for (ProgramNode statement : statements) {
             statement.execute(robot);
         }
     }
 
     public String toString() {
         String toReturn = "{\n";
-        for (StatementNode statement : statements) {
-            toReturn += "    ".repeat(indent)+statement.toString();
+        for (ProgramNode statement : statements) {
+            toReturn += "    ".repeat(indent) + statement.toString();
         }
-        toReturn += "    ".repeat(indent-1)+"}";
+        toReturn += "    ".repeat(indent - 1) + "}";
         return toReturn;
     }
 }
 
+/**
+ * Node representing an if statement
+ * Stores condition+block for if and any elifs
+ * Stores optional else block
+ */
 class IfNode implements ProgramNode {
     List<ConditionBlock> conditionPairs;
     BlockNode elseBlock = null;
@@ -401,10 +448,19 @@ class IfNode implements ProgramNode {
     }
 }
 
+/**
+ * Node representing a while loop
+ * Stores the block in the loop, and condition for stopping
+ */
 class WhileNode implements ProgramNode {
     BlockNode block;
     BooleanNode cond;
-    WhileNode(BlockNode block, BooleanNode cond) { this.block = block; this.cond = cond; }
+
+    WhileNode(BlockNode block, BooleanNode cond) {
+        this.block = block;
+        this.cond = cond;
+    }
+
     @Override
     public void execute(Robot robot) {
         while (cond.evaluate(robot)) {
@@ -413,12 +469,18 @@ class WhileNode implements ProgramNode {
     }
 
     public String toString() {
-        return "while("+cond.toString()+")"+this.block.toString();
+        return "while(" + cond.toString() + ")" + this.block.toString();
     }
 }
+
+/**
+ * Node representing a logical "and" condition
+ * Stores the two conditions to compare
+ */
 class AndNode implements BooleanNode {
     BooleanNode cond1;
     BooleanNode cond2;
+
     AndNode(BooleanNode cond1, BooleanNode cond2) {
         this.cond1 = cond1;
         this.cond2 = cond2;
@@ -429,12 +491,19 @@ class AndNode implements BooleanNode {
         return cond1.evaluate(robot) && cond2.evaluate(robot);
     }
 
-    public String toString() { return "and("+cond1.toString()+", "+cond2.toString()+")"; }
+    public String toString() {
+        return "and(" + cond1.toString() + ", " + cond2.toString() + ")";
+    }
 }
 
+/**
+ * Node representing a logical "or" condition
+ * Stores the two conditions to compare
+ */
 class OrNode implements BooleanNode {
     BooleanNode cond1;
     BooleanNode cond2;
+
     OrNode(BooleanNode cond1, BooleanNode cond2) {
         this.cond1 = cond1;
         this.cond2 = cond2;
@@ -445,11 +514,18 @@ class OrNode implements BooleanNode {
         return cond1.evaluate(robot) || cond2.evaluate(robot);
     }
 
-    public String toString() { return "or("+cond1.toString()+", "+cond2.toString()+")"; }
+    public String toString() {
+        return "or(" + cond1.toString() + ", " + cond2.toString() + ")";
+    }
 }
 
+/**
+ * Node representing a logical "not" condition
+ * Stores the condition to negate
+ */
 class NotNode implements BooleanNode {
     BooleanNode cond;
+
     NotNode(BooleanNode cond) {
         this.cond = cond;
     }
@@ -459,9 +535,16 @@ class NotNode implements BooleanNode {
         return !cond.evaluate(robot);
     }
 
-    public String toString() { return "not(" + cond + ")"; }
+    public String toString() {
+        return "not(" + cond + ")";
+    }
 }
 
+/**
+ * Node representing a relative operation
+ * lt (less than), gt (greater than), or eq (equal to)
+ * Stores type of operation, and the two expressions to compare
+ */
 class RelopNode implements BooleanNode {
     String relop;
     IntNode expr1;
@@ -484,21 +567,30 @@ class RelopNode implements BooleanNode {
     }
 
     public String toString() {
-        return relop+"("+expr1.toString()+", "+expr2.toString()+")";
+        return relop + "(" + expr1.toString() + ", " + expr2.toString() + ")";
     }
 }
 
+/**
+ * Node representing a robot sensor
+ * Stores the name of the sensor and optional amount
+ */
 class SensorNode implements IntNode {
     String sensor;
     IntNode amount = null;
-    SensorNode(String sensor) { this.sensor = sensor; }
+
+    SensorNode(String sensor) {
+        this.sensor = sensor;
+    }
+
     SensorNode(String sensor, IntNode amt) {
         this.sensor = sensor;
         this.amount = amt;
     }
+
     @Override
     public int evaluate(Robot robot) {
-        return switch(sensor) {
+        return switch (sensor) {
             case "fuelLeft" -> robot.getFuel();
             case "oppLR" -> robot.getOpponentLR();
             case "oppFB" -> robot.getOpponentFB();
@@ -515,19 +607,32 @@ class SensorNode implements IntNode {
     }
 }
 
+/**
+ * Node representing a (integer) number
+ * Stores the number
+ */
 class NumberNode implements IntNode {
     int num;
-    NumberNode(int num) {this.num = num;}
+
+    NumberNode(int num) {
+        this.num = num;
+    }
+
     @Override
     public int evaluate(Robot robot) {
         return num;
     }
 
     public String toString() {
-        return ""+num;
+        return "" + num;
     }
 }
 
+/**
+ * Node representing a basic mathematical operation
+ * ie addition, subtraction, multiplication, division
+ * Stores type of operation, and the two operands
+ */
 class MathNode implements IntNode {
     IntNode expr1;
     IntNode expr2;
@@ -542,18 +647,24 @@ class MathNode implements IntNode {
 
     @Override
     public int evaluate(Robot robot) {
-        return switch(operation) {
-            case "add" -> expr1.evaluate(robot)+expr2.evaluate(robot);
-            case "sub" -> expr1.evaluate(robot)-expr2.evaluate(robot);
-            case "mul" -> expr1.evaluate(robot)*expr2.evaluate(robot);
-            case "div" -> expr1.evaluate(robot)/expr2.evaluate(robot);
+        return switch (operation) {
+            case "add" -> expr1.evaluate(robot) + expr2.evaluate(robot);
+            case "sub" -> expr1.evaluate(robot) - expr2.evaluate(robot);
+            case "mul" -> expr1.evaluate(robot) * expr2.evaluate(robot);
+            case "div" -> expr1.evaluate(robot) / expr2.evaluate(robot);
             default -> throw new IllegalStateException("Invalid operation"); // this should never run
         };
     }
 
-    public String toString() { return operation+"("+expr1.toString()+", "+expr2.toString()+")"; }
+    public String toString() {
+        return operation + "(" + expr1.toString() + ", " + expr2.toString() + ")";
+    }
 }
 
+/**
+ * Represents the pair of a condition and block
+ * Useful for repetition for if/elif statements
+ */
 class ConditionBlock {
     BlockNode block;
     BooleanNode cond;
@@ -564,6 +675,10 @@ class ConditionBlock {
     }
 }
 
+/**
+ * Node representing a user-defined variable
+ * Stores the name and integer value of the variable
+ */
 class VariableNode implements IntNode {
     String name;
     int value;
@@ -581,11 +696,17 @@ class VariableNode implements IntNode {
     public int evaluate(Robot robot) {
         return value;
     }
+
     public String toString() {
         return name;
     }
 }
 
+/**
+ * Node representing a variable assignment statement
+ * Stores the name and value of the variable
+ * Also stores the instance of VariableStorage to add the variable to
+ */
 class AssignNode implements ProgramNode {
     String name;
     IntNode value;
@@ -607,11 +728,17 @@ class AssignNode implements ProgramNode {
     }
 }
 
+/**
+ * Stores variables allowing access from other classes
+ * without using static as that can cause issues with multiple robots
+ */
 class VariableStorage {
     public Map<String, VariableNode> variables;
+
     VariableStorage() {
         variables = new HashMap<>();
     }
+
     public VariableNode getVar(String name) {
         VariableNode toReturn = variables.get(name);
         if (toReturn == null) {
