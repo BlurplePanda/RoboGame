@@ -20,8 +20,6 @@ public class Parser {
     static final Pattern CLOSEBRACE = Pattern.compile("\\}");
     private int indentLevel = 0;
 
-    private VariableStorage vars = new VariableStorage();
-
     //----------------------------------------------------------------
 
     /**
@@ -35,19 +33,19 @@ public class Parser {
         return parseProg(s);
     }
 
-    ProgNode parseProg(Scanner s) {
+    ProgramNode parseProg(Scanner s) {
         if (!s.hasNext()) {
             System.out.println("Provided file is empty, running default program.");
             return null;
         }
-        List<ProgramNode> statements = new ArrayList<>();
+        List<ProgNode> statements = new ArrayList<>();
         while (s.hasNext()) {
             statements.add(parseStatement(s));
         }
-        return new ProgNode(statements);
+        return new ProgramNode(statements);
     }
 
-    ProgramNode parseStatement(Scanner s) {
+    ProgNode parseStatement(Scanner s) {
         if (checkFor("loop", s)) {
             return new LoopNode(parseBlock(s));
         } else if (checkFor("if", s)) {
@@ -75,7 +73,7 @@ public class Parser {
             require("\\=", "Expected '='", s);
             IntNode value = parseExpression(s);
             require(";", "Missing semicolon", s);
-            return new AssignNode(name, value, vars);
+            return new AssignNode(name, value);
         } else {
             ActionNode action = parseAction(s);
             require(";", "Missing semicolon", s);
@@ -114,7 +112,7 @@ public class Parser {
 
     BlockNode parseBlock(Scanner s) {
         indentLevel++;
-        List<ProgramNode> statements = new ArrayList<>();
+        List<ProgNode> statements = new ArrayList<>();
         require(OPENBRACE, "Missing '{'", s);
         while (!checkFor(CLOSEBRACE, s)) {
             statements.add(parseStatement(s));
@@ -152,7 +150,7 @@ public class Parser {
                 return new SensorNode(sensor);
             }
         } else if (s.hasNext("\\$[A-Za-z][A-Za-z0-9]*")) {
-            return vars.getVar(s.next());
+            return new VariableNode(s.next());
         } else {
             String op = require("add|sub|mul|div", "Invalid operation", s);
             require(OPENPAREN, "Missing '('", s);
@@ -251,7 +249,7 @@ public class Parser {
 // You could add the node classes here or as separate java files.
 // (if added here, they must not be declared public or private)
 // For example:
-//  class BlockNode implements ProgramNode {.....
+//  class BlockNode implements ProgNode {.....
 //     with fields, a toString() method and an execute() method
 //
 
@@ -261,7 +259,7 @@ public class Parser {
  */
 
 interface IntNode {
-    int evaluate(Robot robot);
+    int evaluate(Robot robot, VariableStorage vars);
 }
 
 /**
@@ -270,7 +268,7 @@ interface IntNode {
  */
 
 interface BooleanNode {
-    boolean evaluate(Robot robot);
+    boolean evaluate(Robot robot, VariableStorage vars);
 }
 
 /**
@@ -278,23 +276,23 @@ interface BooleanNode {
  * (The root node of the generated program tree)
  * Stores any statements in the program
  */
-class ProgNode implements ProgramNode {
-    List<ProgramNode> statements;
+class ProgramNode {
+    List<ProgNode> statements;
 
-    ProgNode(List<ProgramNode> statements) {
+    ProgramNode(List<ProgNode> statements) {
         this.statements = statements;
     }
-
-    @Override
+    
     public void execute(Robot robot) {
-        for (ProgramNode statement : statements) {
-            statement.execute(robot);
+        VariableStorage vars = new VariableStorage();
+        for (ProgNode statement : statements) {
+            statement.execute(robot, vars);
         }
     }
 
     public String toString() {
         String toReturn = "";
-        for (ProgramNode statement : statements) {
+        for (ProgNode statement : statements) {
             toReturn += statement.toString();
         }
         return toReturn.substring(0, toReturn.length() - 1);
@@ -305,7 +303,7 @@ class ProgNode implements ProgramNode {
  * Node representing a robot action
  * Stores the type of action, and the amount if it exists
  */
-class ActionNode implements ProgramNode {
+class ActionNode implements ProgNode {
     String actionType;
     IntNode amount = null;
 
@@ -319,8 +317,8 @@ class ActionNode implements ProgramNode {
     }
 
     @Override
-    public void execute(Robot robot) {
-        int num = (amount != null) ? amount.evaluate(robot) : 1;
+    public void execute(Robot robot, VariableStorage vars) {
+        int num = (amount != null) ? amount.evaluate(robot, vars) : 1;
         switch (actionType) {
             case "turnL" -> robot.turnLeft();
             case "turnR" -> robot.turnRight();
@@ -351,7 +349,7 @@ class ActionNode implements ProgramNode {
  * Stores the block of statements inside the loop
  * Executes them forever (until robot runs out of fuel)
  */
-class LoopNode implements ProgramNode {
+class LoopNode implements ProgNode {
     BlockNode block;
 
     LoopNode(BlockNode block) {
@@ -359,9 +357,9 @@ class LoopNode implements ProgramNode {
     }
 
     @Override
-    public void execute(Robot robot) {
+    public void execute(Robot robot, VariableStorage vars) {
         while (true) {
-            block.execute(robot);
+            block.execute(robot, vars);
         }
     }
 
@@ -375,25 +373,25 @@ class LoopNode implements ProgramNode {
  * Stores any statements in the block
  * Also stores an indent level for pretty printing
  */
-class BlockNode implements ProgramNode {
-    List<ProgramNode> statements;
+class BlockNode implements ProgNode {
+    List<ProgNode> statements;
     int indent;
 
-    BlockNode(List<ProgramNode> statements, int indent) {
+    BlockNode(List<ProgNode> statements, int indent) {
         this.statements = statements;
         this.indent = indent;
     }
 
     @Override
-    public void execute(Robot robot) {
-        for (ProgramNode statement : statements) {
-            statement.execute(robot);
+    public void execute(Robot robot, VariableStorage vars) {
+        for (ProgNode statement : statements) {
+            statement.execute(robot, vars);
         }
     }
 
     public String toString() {
         String toReturn = "{\n";
-        for (ProgramNode statement : statements) {
+        for (ProgNode statement : statements) {
             toReturn += "    ".repeat(indent) + statement.toString();
         }
         toReturn += "    ".repeat(indent - 1) + "}";
@@ -406,7 +404,7 @@ class BlockNode implements ProgramNode {
  * Stores condition+block for if and any elifs
  * Stores optional else block
  */
-class IfNode implements ProgramNode {
+class IfNode implements ProgNode {
     List<ConditionBlock> conditionPairs;
     BlockNode elseBlock = null;
 
@@ -420,15 +418,15 @@ class IfNode implements ProgramNode {
     }
 
     @Override
-    public void execute(Robot robot) {
+    public void execute(Robot robot, VariableStorage vars) {
         for (ConditionBlock pair : conditionPairs) {
-            if (pair.cond.evaluate(robot)) {
-                pair.block.execute(robot);
+            if (pair.cond.evaluate(robot, vars)) {
+                pair.block.execute(robot, vars);
                 return;
             }
         }
         if (elseBlock != null) {
-            elseBlock.execute(robot);
+            elseBlock.execute(robot, vars);
         }
 
     }
@@ -452,7 +450,7 @@ class IfNode implements ProgramNode {
  * Node representing a while loop
  * Stores the block in the loop, and condition for stopping
  */
-class WhileNode implements ProgramNode {
+class WhileNode implements ProgNode {
     BlockNode block;
     BooleanNode cond;
 
@@ -462,9 +460,9 @@ class WhileNode implements ProgramNode {
     }
 
     @Override
-    public void execute(Robot robot) {
-        while (cond.evaluate(robot)) {
-            block.execute(robot);
+    public void execute(Robot robot, VariableStorage vars) {
+        while (cond.evaluate(robot, vars)) {
+            block.execute(robot, vars);
         }
     }
 
@@ -487,8 +485,8 @@ class AndNode implements BooleanNode {
     }
 
     @Override
-    public boolean evaluate(Robot robot) {
-        return cond1.evaluate(robot) && cond2.evaluate(robot);
+    public boolean evaluate(Robot robot, VariableStorage vars) {
+        return cond1.evaluate(robot, vars) && cond2.evaluate(robot, vars);
     }
 
     public String toString() {
@@ -510,8 +508,8 @@ class OrNode implements BooleanNode {
     }
 
     @Override
-    public boolean evaluate(Robot robot) {
-        return cond1.evaluate(robot) || cond2.evaluate(robot);
+    public boolean evaluate(Robot robot, VariableStorage vars) {
+        return cond1.evaluate(robot, vars) || cond2.evaluate(robot, vars);
     }
 
     public String toString() {
@@ -531,8 +529,8 @@ class NotNode implements BooleanNode {
     }
 
     @Override
-    public boolean evaluate(Robot robot) {
-        return !cond.evaluate(robot);
+    public boolean evaluate(Robot robot, VariableStorage vars) {
+        return !cond.evaluate(robot, vars);
     }
 
     public String toString() {
@@ -557,11 +555,11 @@ class RelopNode implements BooleanNode {
     }
 
     @Override
-    public boolean evaluate(Robot robot) {
+    public boolean evaluate(Robot robot, VariableStorage vars) {
         return switch (relop) {
-            case "lt" -> expr1.evaluate(robot) < expr2.evaluate(robot);
-            case "gt" -> expr1.evaluate(robot) > expr2.evaluate(robot);
-            case "eq" -> expr1.evaluate(robot) == expr2.evaluate(robot);
+            case "lt" -> expr1.evaluate(robot, vars) < expr2.evaluate(robot, vars);
+            case "gt" -> expr1.evaluate(robot, vars) > expr2.evaluate(robot, vars);
+            case "eq" -> expr1.evaluate(robot, vars) == expr2.evaluate(robot, vars);
             default -> throw new IllegalStateException("Invalid relative operator"); // this should never run
         };
     }
@@ -589,14 +587,14 @@ class SensorNode implements IntNode {
     }
 
     @Override
-    public int evaluate(Robot robot) {
+    public int evaluate(Robot robot, VariableStorage vars) {
         return switch (sensor) {
             case "fuelLeft" -> robot.getFuel();
             case "oppLR" -> robot.getOpponentLR();
             case "oppFB" -> robot.getOpponentFB();
             case "numBarrels" -> robot.numBarrels();
-            case "barrelLR" -> amount == null ? robot.getClosestBarrelLR() : robot.getBarrelLR(amount.evaluate(robot));
-            case "barrelFB" -> amount == null ? robot.getClosestBarrelFB() : robot.getBarrelFB(amount.evaluate(robot));
+            case "barrelLR" -> amount == null ? robot.getClosestBarrelLR() : robot.getBarrelLR(amount.evaluate(robot, vars));
+            case "barrelFB" -> amount == null ? robot.getClosestBarrelFB() : robot.getBarrelFB(amount.evaluate(robot, vars));
             case "wallDist" -> robot.getDistanceToWall();
             default -> throw new IllegalStateException("Invalid sensor"); // this should never run
         };
@@ -619,7 +617,7 @@ class NumberNode implements IntNode {
     }
 
     @Override
-    public int evaluate(Robot robot) {
+    public int evaluate(Robot robot, VariableStorage vars) {
         return num;
     }
 
@@ -646,12 +644,12 @@ class MathNode implements IntNode {
 
 
     @Override
-    public int evaluate(Robot robot) {
+    public int evaluate(Robot robot, VariableStorage vars) {
         return switch (operation) {
-            case "add" -> expr1.evaluate(robot) + expr2.evaluate(robot);
-            case "sub" -> expr1.evaluate(robot) - expr2.evaluate(robot);
-            case "mul" -> expr1.evaluate(robot) * expr2.evaluate(robot);
-            case "div" -> expr1.evaluate(robot) / expr2.evaluate(robot);
+            case "add" -> expr1.evaluate(robot, vars) + expr2.evaluate(robot, vars);
+            case "sub" -> expr1.evaluate(robot, vars) - expr2.evaluate(robot, vars);
+            case "mul" -> expr1.evaluate(robot, vars) * expr2.evaluate(robot, vars);
+            case "div" -> expr1.evaluate(robot, vars) / expr2.evaluate(robot, vars);
             default -> throw new IllegalStateException("Invalid operation"); // this should never run
         };
     }
@@ -681,20 +679,15 @@ class ConditionBlock {
  */
 class VariableNode implements IntNode {
     String name;
-    int value;
+    VariableStorage vars;
 
-    VariableNode(String name, int value) {
+    VariableNode(String name) {
         this.name = name;
-        this.value = value;
-    }
-
-    public void setValue(int value) {
-        this.value = value;
     }
 
     @Override
-    public int evaluate(Robot robot) {
-        return value;
+    public int evaluate(Robot robot, VariableStorage vars) {
+        return vars.getVar(name);
     }
 
     public String toString() {
@@ -707,20 +700,18 @@ class VariableNode implements IntNode {
  * Stores the name and value of the variable
  * Also stores the instance of VariableStorage to add the variable to
  */
-class AssignNode implements ProgramNode {
+class AssignNode implements ProgNode {
     String name;
     IntNode value;
-    VariableStorage storage;
 
-    AssignNode(String name, IntNode value, VariableStorage storage) {
+    AssignNode(String name, IntNode value) {
         this.name = name;
         this.value = value;
-        this.storage = storage;
     }
 
     @Override
-    public void execute(Robot robot) {
-        storage.getVar(name).setValue(value.evaluate(robot));
+    public void execute(Robot robot, VariableStorage vars) {
+        vars.setVar(name, value.evaluate(robot, vars));
     }
 
     public String toString() {
@@ -733,18 +724,17 @@ class AssignNode implements ProgramNode {
  * without using static as that can cause issues with multiple robots
  */
 class VariableStorage {
-    public Map<String, VariableNode> variables;
+    public Map<String, Integer> variables;
 
     VariableStorage() {
         variables = new HashMap<>();
     }
 
-    public VariableNode getVar(String name) {
-        VariableNode toReturn = variables.get(name);
-        if (toReturn == null) {
-            toReturn = new VariableNode(name, 0);
-            variables.put(name, toReturn);
-        }
-        return toReturn;
+    public int getVar(String name) {
+        return variables.computeIfAbsent(name, k->0);
+    }
+
+    public void setVar(String name, int value) {
+        variables.put(name, value);
     }
 }

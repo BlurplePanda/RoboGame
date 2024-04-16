@@ -3,6 +3,6 @@
  * including the top level program node
  */
 
-interface ProgramNode {
-    public void execute(Robot robot);
+interface ProgNode {
+    public void execute(Robot robot, VariableStorage vars);
 }
